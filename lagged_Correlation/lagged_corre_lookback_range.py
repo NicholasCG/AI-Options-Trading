@@ -3,6 +3,9 @@ import tkinter as tk
 from tkinter import filedialog
 import os
 
+# pandas suppress warnings
+pd.options.mode.chained_assignment = None
+
 # from tkinter import font as tkfont
 
 # Choose the two CSV files to test for, named A and B, and choose the duration of the lag and the output file name. Display these with a single GUI window and make to import the required libraries.
@@ -186,12 +189,87 @@ def main():
             dist_df.loc[name] = full_conditional_stats
             trade_df.loc[name] = trade_stats
 
+        # split the dates by year and generate the same dataframes as above for each year
+        years = asset_a_change_pivot.index.year.unique()
+
+        probs_df_yearly = {}
+
+        for year in years:
+            asset_a_change_pivot_year = asset_a_change_pivot[asset_a_change_pivot.index.year == year]
+            asset_b_change_pivot_year = asset_b_change_pivot[asset_b_change_pivot.index.year == year]
+            asset_b_vals_pivot_year = asset_b_vals_pivot[asset_b_vals_pivot.index.year == year]
+
+            probs_df_yearly[year] = pd.DataFrame(columns = ['a_down_b_down',  'a_down_b_up', 'a_up_b_down', 'a_up_b_up'])
+
+            time_diff = 0
+
+            # for each column in asset_a_change_pivot
+            for col in asset_a_change_pivot_year.columns:
+                asset_a_col = asset_a_change_pivot_year[col]
+
+                # shift datetime.time by time_diff
+                b_col = col + pd.Timedelta(minutes=time_diff)
+
+                if b_col not in asset_b_change_pivot_year.columns:
+                    continue
+
+                asset_b_col = asset_b_change_pivot_year[b_col]
+
+                # get the combinations in tuple pairs, and any pairs with NaN are dropped
+                combo_col = pd.DataFrame(list(zip(asset_a_col, asset_b_col))).dropna()
+
+                asset_a_prob = combo_col[0].value_counts(normalize=True)
+                conditional_probs = combo_col.groupby(0)[1].value_counts(normalize=True)
+
+                conditional = conditional_probs.unstack().fillna(0).to_dict()
+
+                full_conditional = {}
+
+                full_conditional_stats = {}
+
+                trade_stats = {}
+
+                rename = {-1: "down", 1: "up"}
+
+                for i in [-1, 1]:
+                    for j in [-1, 1]:
+                        if i not in conditional or j not in conditional[i]:
+                            full_conditional[f"a_{rename[j]}_b_{rename[i]}"] = 0
+                            full_conditional_stats[f"a_{rename[j]}_b_{rename[i]}"] = [0,0,0]
+                            trade_stats[f"a_{rename[j]}_b_{rename[i]}"] = []
+
+                        else:
+                            full_conditional[f"a_{rename[j]}_b_{rename[i]}"] = conditional[i][j]
+
+                            # get the rows for each combination of a and b
+                            a_down_b_down = combo_col[(combo_col[0] == j) & (combo_col[1] == i)]
+                            
+                            # get the count, mean, and std from asset_b_vals_pivot for the rows in a_down_b_down for the hour
+                            a_down_b_down_vals = asset_b_change_orig.iloc[a_down_b_down.index][b_col].astype(float).describe().fillna(0).to_dict()
+
+                            full_conditional_stats[f"a_{rename[j]}_b_{rename[i]}"] = [int(a_down_b_down_vals['count']), a_down_b_down_vals['mean'], a_down_b_down_vals['std']]
+
+                            trade_history = asset_b_vals_pivot_year.iloc[a_down_b_down.index][b_col].astype(float).to_dict()
+                            
+                            # convert the dictionary to a list of tuples, converting Timestamp to string of only the date
+                            trade_history = [(str(k.date()), v) for k, v in trade_history.items()]
+
+                            trade_stats[f"a_{rename[j]}_b_{rename[i]}"] = trade_history
+
+                name = col.strftime('%H:%M:%S')
+
+                # add the percentages to the dataframe using the name as the index
+                probs_df_yearly[year].loc[name] = full_conditional
+
         # get base file name without extension
         output_file_base = os.path.splitext(output_file)[0]
 
         probs_df.to_csv(output_file)
         dist_df.to_csv(f"{output_file_base}_stats.csv")
         trade_df.to_csv(f"{output_file_base}_trades.csv")
+
+        for year in years:
+            probs_df_yearly[year].to_csv(f"{output_file_base}_{year}.csv")
 
         # print full output path
         print("\n\n")
