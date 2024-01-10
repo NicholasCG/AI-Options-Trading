@@ -45,23 +45,27 @@ def main():
         times = {d: i for i, d in enumerate(asset_a_change['Time'])}
 
         # make a new row of the Time column with the Time subtracted by lookback minutes
-        lookback_mask = asset_a_change['Time'] - pd.Timedelta(minutes=lookback)
+        # lookback_mask = asset_a_change['Time'] - pd.Timedelta(minutes=lookback)
 
-        # make a mask if the time is in Times. If it is, give the difference in rows, if not, give NaN
-        lookback_mask = lookback_mask.map(times.get).dropna()
+        # # make a mask if the time is in Times. If it is, give the difference in rows, if not, give NaN
+        # lookback_mask = lookback_mask.map(times.get).dropna()
 
-        # lookback_pct_change = pd.Series(index=asset_a_change.index, dtype='float64')
-        lookback_change = pd.Series(index=asset_a_change.index, dtype='float64')
+        # # lookback_pct_change = pd.Series(index=asset_a_change.index, dtype='float64')
+        # lookback_change = pd.Series(index=asset_a_change.index, dtype='float64')
 
-        for i in lookback_mask.index:
-            # lookback_pct_change[i] = (asset_a_change.loc[i, 'Open'] / asset_a_change.loc[lookback_mask[i], 'Open'] - 1) * 100
-            # lookback_change[i] = asset_a_change.loc[i, 'Open'] - asset_a_change.loc[lookback_mask[i], 'Open']
-            lookback_change[i] = asset_a_change.loc[lookback_mask[i], 'Index']
+        # for i in lookback_mask.index:
+        #     # lookback_pct_change[i] = (asset_a_change.loc[i, 'Open'] / asset_a_change.loc[lookback_mask[i], 'Open'] - 1) * 100
+        #     # lookback_change[i] = asset_a_change.loc[i, 'Open'] - asset_a_change.loc[lookback_mask[i], 'Open']
+        #     lookback_change[i] = asset_a_change.loc[lookback_mask[i], 'Index']
 
-        # asset_a_change['Chg%'] = lookback_pct_change
+        # # asset_a_change['Chg%'] = lookback_pct_change
+        # # asset_a_change['Chg'] = lookback_change
         # asset_a_change['Chg'] = lookback_change
-        asset_a_change['Chg'] = lookback_change
-        asset_a_change['Chg%'] = lookback_change
+        # asset_a_change['Chg%'] = lookback_change
+
+        # Shift Time column by lookback minutes
+        asset_a_change['Time'] = asset_a_change['Time'] + pd.Timedelta(minutes=lookback)
+        asset_a_change['Chg%'] = asset_a_change['Index']
 
         # asset_a_change['Chg%'] = asset_a_change['Index']
         # asset_a_change['Chg'] = asset_a_change['Index']
@@ -90,8 +94,12 @@ def main():
         # make a new row of the Time column with the Time subtracted by lookback minutes
         lookahead_mask = asset_b_change['Time'] + pd.Timedelta(minutes=lookahead)
 
+        #print(lookahead_mask)
+
         # make a mask if the time is in Times. If it is, give the difference in rows, if not, give NaN
         lookahead_mask = lookahead_mask.map(times_b.get).dropna()
+
+        #print(lookahead_mask)
 
         # for the rows in lookback_mask, calculate the difference between the Open price of a time and the Open price of the time in lookback_mask
         lookahead_pct_change = pd.Series(index=asset_b_change.index, dtype='float64')
@@ -103,6 +111,8 @@ def main():
 
         asset_b_change['Chg%'] = lookahead_pct_change
         asset_b_change['Chg'] = lookahead_change
+
+        # print(asset_b_change)
 
 
         asset_b_change['Date'] = asset_b_change['Time'].dt.date
@@ -120,6 +130,8 @@ def main():
         asset_b_change_orig = asset_b_change_pivot.copy()
 
         asset_b_change_pivot = asset_b_change_pivot.applymap(lambda x: 1 if x > 0 else -1 if x <= 0 else pd.NaT)
+
+        print(asset_a_change_pivot.columns, asset_b_change_pivot.columns)
 
         # For the two pivot tables, find the Date rows and Time columns that are in both tables
         common_dates = asset_a_change_pivot.index.intersection(asset_b_change_pivot.index)
@@ -306,7 +318,6 @@ def main():
 
     low_thres = [float(x) for x in low_thres]
     high_thres = [float(x) for x in high_thres]
-
 
     time_diff = int(input("Enter the gap between the lookback and lookahead windows (You probably want this at 0): "))
 
